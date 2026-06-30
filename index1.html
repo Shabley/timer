@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>프리미엄 타이머 & 스톱워치</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0f0f23',
+                        panel: '#1a1a3a',
+                        accent: '#748ffc',
+                        accentHover: '#5c76df'
+                    },
+                    fontFamily: {
+                        sans: ['Pretendard', 'Apple SD Gothic Neo', 'Noto Sans KR', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Courier New', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+        
+        body {
+            background-color: #0f0f23;
+            color: #ffffff;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* SVG Circular Progress Transition */
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.1s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+
+        /* Hide scrollbar for lap list */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 antialiased">
+
+    <main class="w-full max-w-md bg-panel rounded-3xl shadow-2xl overflow-hidden flex flex-col h-[85vh] sm:h-[800px]">
+        
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-700/50">
+            <button id="tab-stopwatch" class="flex-1 py-5 text-center text-lg font-bold text-accent border-b-2 border-accent transition-colors" onclick="switchTab('stopwatch')">스톱워치</button>
+            <button id="tab-timer" class="flex-1 py-5 text-center text-lg font-bold text-gray-500 border-b-2 border-transparent hover:text-gray-300 transition-colors" onclick="switchTab('timer')">타이머</button>
+        </div>
+
+        <div class="flex-1 relative overflow-y-auto no-scrollbar flex flex-col relative p-6">
+            
+            <!-- SVG Progress Circle -->
+            <div class="relative flex justify-center items-center mt-6 mb-8 shrink-0">
+                <svg class="w-64 h-64 sm:w-72 sm:h-72" viewBox="0 0 256 256">
+                    <!-- Background Circle -->
+                    <circle cx="128" cy="128" r="120" stroke="#2a2a4a" stroke-width="8" fill="transparent"></circle>
+                    <!-- Progress Circle -->
+                    <circle id="progress-circle" class="progress-ring__circle" cx="128" cy="128" r="120" stroke="#748ffc" stroke-width="8" fill="transparent" stroke-dasharray="753.98" stroke-dashoffset="0" stroke-linecap="round"></circle>
+                </svg>
+                <!-- Main Time Display -->
+                <div id="main-display" class="absolute flex flex-col items-center justify-center">
+                    <span id="time-display" class="text-5xl sm:text-6xl font-mono font-bold tracking-tight">00:00.00</span>
+                    <span id="ms-display" class="text-xl text-gray-400 font-mono mt-1 hidden">.00</span>
+                </div>
+            </div>
+
+            <!-- STOPWATCH SECTION -->
+            <div id="stopwatch-section" class="flex flex-col flex-1">
+                <!-- Controls -->
+                <div class="flex justify-center gap-6 mb-8 shrink-0">
+                    <button id="sw-btn-reset" class="w-16 h-16 rounded-full bg-gray-700/50 text-gray-300 font-bold shadow-lg hover:bg-gray-600 transition-colors" onclick="resetStopwatch()">초기화</button>
+                    <button id="sw-btn-start" class="w-20 h-20 rounded-full bg-accent text-dark font-bold text-xl shadow-lg hover:bg-accentHover transition-colors shadow-accent/20" onclick="toggleStopwatch()">시작</button>
+                    <button id="sw-btn-lap" class="w-16 h-16 rounded-full bg-gray-700/50 text-gray-300 font-bold shadow-lg hover:bg-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" onclick="recordLap()" disabled>랩</button>
+                </div>
+
+                <!-- Laps -->
+                <div class="flex-1 overflow-y-auto no-scrollbar border-t border-gray-700/50 pt-4">
+                    <div class="flex justify-between text-sm text-gray-500 mb-2 px-2">
+                        <span>랩</span>
+                        <span>구간 기록</span>
+                        <span>전체 시간</span>
+                    </div>
+                    <ul id="lap-list" class="flex flex-col gap-2 pb-4">
+                        <!-- Lap items will be injected here -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- TIMER SECTION -->
+            <div id="timer-section" class="hidden flex flex-col flex-1">
+                
+                <!-- Presets -->
+                <div class="grid grid-cols-5 gap-2 mb-6 shrink-0">
+                    <button class="py-2 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold hover:bg-gray-700 hover:text-white transition-colors" onclick="setTimerPreset(1)">1분</button>
+                    <button class="py-2 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold hover:bg-gray-700 hover:text-white transition-colors" onclick="setTimerPreset(3)">3분</button>
+                    <button class="py-2 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold hover:bg-gray-700 hover:text-white transition-colors" onclick="setTimerPreset(5)">5분</button>
+                    <button class="py-2 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold hover:bg-gray-700 hover:text-white transition-colors" onclick="setTimerPreset(10)">10분</button>
+                    <button class="py-2 rounded-xl bg-gray-800 text-gray-300 text-sm font-semibold hover:bg-gray-700 hover:text-white transition-colors" onclick="setTimerPreset(25)">25분</button>
+                </div>
+
+                <!-- Custom Input -->
+                <div class="flex items-center gap-3 mb-8 bg-gray-800/50 p-3 rounded-2xl shrink-0">
+                    <input type="number" id="custom-min" placeholder="분" min="0" class="w-full bg-transparent text-white text-center text-lg font-bold outline-none placeholder-gray-500">
+                    <span class="text-gray-400">:</span>
+                    <input type="number" id="custom-sec" placeholder="초" min="0" max="59" class="w-full bg-transparent text-white text-center text-lg font-bold outline-none placeholder-gray-500">
+                    <button class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-xl font-bold transition-colors whitespace-nowrap" onclick="setCustomTimer()">설정</button>
+                </div>
+
+                <!-- Controls -->
+                <div class="flex justify-center gap-6 mt-auto pb-6">
+                    <button id="tm-btn-reset" class="w-16 h-16 rounded-full bg-gray-700/50 text-gray-300 font-bold shadow-lg hover:bg-gray-600 transition-colors" onclick="resetTimer()">취소</button>
+                    <button id="tm-btn-start" class="w-20 h-20 rounded-full bg-accent text-dark font-bold text-xl shadow-lg hover:bg-accentHover transition-colors shadow-accent/20" onclick="toggleTimer()">시작</button>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // --- Constants & Variables ---
+        const CIRCUMFERENCE = 2 * Math.PI * 120; // r=120
+        const progressCircle = document.getElementById('progress-circle');
+        const timeDisplay = document.getElementById('time-display');
+        
+        // State
+        let currentMode = 'stopwatch'; // 'stopwatch' or 'timer'
+        let animationFrameId;
+
+        // Stopwatch State
+        let swStartTime = 0;
+        let swElapsedTime = 0;
+        let swIsRunning = false;
+        let swLaps = [];
+        let swLastLapTime = 0;
+
+        // Timer State
+        let tmDuration = 0; // ms
+        let tmRemaining = 0; // ms
+        let tmEndTime = 0;
+        let tmIsRunning = false;
+
+        // --- Initialization ---
+        function init() {
+            progressCircle.style.strokeDasharray = `${CIRCUMFERENCE} ${CIRCUMFERENCE}`;
+            progressCircle.style.strokeDashoffset = CIRCUMFERENCE; // Hidden by default (Timer logic)
+            
+            // Load laps from local storage
+            const savedLaps = localStorage.getItem('stopwatch_laps');
+            if (savedLaps) {
+                try {
+                    swLaps = JSON.parse(savedLaps);
+                    renderLaps();
+                } catch (e) {
+                    console.error("Failed to parse laps from localStorage", e);
+                }
+            }
+
+            updateDisplay();
+        }
+
+        // --- Tab Management ---
+        function switchTab(mode) {
+            currentMode = mode;
+            
+            // Update UI Tab styles
+            const swTab = document.getElementById('tab-stopwatch');
+            const tmTab = document.getElementById('tab-timer');
+            const swSec = document.getElementById('stopwatch-section');
+            const tmSec = document.getElementById('timer-section');
+
+            if (mode === 'stopwatch') {
+                swTab.classList.replace('text-gray-500', 'text-accent');
+                swTab.classList.replace('border-transparent', 'border-accent');
+                tmTab.classList.replace('text-accent', 'text-gray-500');
+                tmTab.classList.replace('border-accent', 'border-transparent');
+                
+                swSec.classList.remove('hidden');
+                tmSec.classList.add('hidden');
+            } else {
+                tmTab.classList.replace('text-gray-500', 'text-accent');
+                tmTab.classList.replace('border-transparent', 'border-accent');
+                swTab.classList.replace('text-accent', 'text-gray-500');
+                swTab.classList.replace('border-accent', 'border-transparent');
+                
+                tmSec.classList.remove('hidden');
+                swSec.classList.add('hidden');
+            }
+            
+            updateDisplay();
+        }
+
+        // --- Core Render Loop ---
+        function update() {
+            const now = Date.now();
+            
+            if (currentMode === 'stopwatch' && swIsRunning) {
+                swElapsedTime = now - swStartTime;
+                updateDisplay();
+                animationFrameId = requestAnimationFrame(update);
+            } else if (currentMode === 'timer' && tmIsRunning) {
+                tmRemaining = tmEndTime - now;
+                if (tmRemaining <= 0) {
+                    tmRemaining = 0;
+                    timerComplete();
+                } else {
+                    updateDisplay();
+                    animationFrameId = requestAnimationFrame(update);
+                }
+            }
+        }
+
+        function updateDisplay() {
+            if (currentMode === 'stopwatch') {
+                timeDisplay.textContent = formatTime(swElapsedTime, true);
+                
+                // Progress circle logic for stopwatch: 1 rotation per 60 seconds
+                const seconds = (swElapsedTime % 60000) / 1000;
+                const percentage = seconds / 60;
+                const offset = CIRCUMFERENCE - (percentage * CIRCUMFERENCE);
+                progressCircle.style.strokeDashoffset = offset;
+
+            } else {
+                // Timer
+                timeDisplay.textContent = formatTime(tmRemaining, false);
+                
+                // Progress circle logic for timer: drains down
+                if (tmDuration > 0) {
+                    const percentage = tmRemaining / tmDuration;
+                    const offset = CIRCUMFERENCE - (percentage * CIRCUMFERENCE);
+                    progressCircle.style.strokeDashoffset = offset;
+                } else {
+                    progressCircle.style.strokeDashoffset = CIRCUMFERENCE; // Empty
+                }
+            }
+        }
+
+        // --- Formatting Utility ---
+        function formatTime(ms, includeMs = false) {
+            const totalSeconds = Math.floor(ms / 1000);
+            const hours = Math.floor(totalSeconds / 3600);
+            const minutes = Math.floor((totalSeconds % 3600) / 60);
+            const seconds = totalSeconds % 60;
+            
+            let result = '';
+            if (hours > 0) {
+                result += `${hours.toString().padStart(2, '0')}:`;
+            }
+            result += `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            if (includeMs) {
+                const milliseconds = Math.floor((ms % 1000) / 10); // get 2 digits
+                result += `.${milliseconds.toString().padStart(2, '0')}`;
+            }
+            
+            return result;
+        }
+
+        // --- Stopwatch Logic ---
+        function toggleStopwatch() {
+            const btnStart = document.getElementById('sw-btn-start');
+            const btnLap = document.getElementById('sw-btn-lap');
+            
+            if (swIsRunning) {
+                // Pause
+                swIsRunning = false;
+                cancelAnimationFrame(animationFrameId);
+                btnStart.textContent = '계속';
+                btnStart.classList.replace('bg-red-500', 'bg-accent');
+                btnStart.classList.replace('shadow-red-500/20', 'shadow-accent/20');
+                btnLap.disabled = true;
+            } else {
+                // Start
+                swIsRunning = true;
+                swStartTime = Date.now() - swElapsedTime;
+                btnStart.textContent = '일시정지';
+                btnStart.classList.replace('bg-accent', 'bg-red-500');
+                btnStart.classList.replace('shadow-accent/20', 'shadow-red-500/20');
+                btnLap.disabled = false;
+                update();
+            }
+        }
+
+        function resetStopwatch() {
+            swIsRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            swElapsedTime = 0;
+            swStartTime = 0;
+            swLaps = [];
+            swLastLapTime = 0;
+            
+            localStorage.removeItem('stopwatch_laps');
+            
+            const btnStart = document.getElementById('sw-btn-start');
+            btnStart.textContent = '시작';
+            btnStart.classList.replace('bg-red-500', 'bg-accent');
+            btnStart.classList.replace('shadow-red-500/20', 'shadow-accent/20');
+            document.getElementById('sw-btn-lap').disabled = true;
+            
+            renderLaps();
+            updateDisplay();
+        }
+
+        function recordLap() {
+            if (!swIsRunning) return;
+            
+            const currentTotal = swElapsedTime;
+            const lapTime = currentTotal - swLastLapTime;
+            swLastLapTime = currentTotal;
+            
+            swLaps.unshift({ lap: lapTime, total: currentTotal }); // Add to beginning
+            
+            localStorage.setItem('stopwatch_laps', JSON.stringify(swLaps));
+            renderLaps();
+        }
+
+        function renderLaps() {
+            const list = document.getElementById('lap-list');
+            list.innerHTML = '';
+            
+            const totalLaps = swLaps.length;
+            swLaps.forEach((lapData, index) => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center py-3 px-4 bg-gray-800/40 rounded-xl font-mono text-sm';
+                li.innerHTML = `
+                    <span class="text-gray-400 font-sans font-bold">Lap ${totalLaps - index}</span>
+                    <span class="text-accent">${formatTime(lapData.lap, true)}</span>
+                    <span class="text-white">${formatTime(lapData.total, true)}</span>
+                `;
+                list.appendChild(li);
+            });
+            
+            // Recalculate swLastLapTime if loading from storage
+            if (swLaps.length > 0 && swLastLapTime === 0 && !swIsRunning) {
+                swLastLapTime = swLaps[0].total;
+                swElapsedTime = swLaps[0].total; // Optional: set display to last lap total
+            }
+        }
+
+        // --- Timer Logic ---
+        function toggleTimer() {
+            const btnStart = document.getElementById('tm-btn-start');
+            
+            if (tmRemaining === 0 && tmDuration === 0) return; // Nothing to start
+
+            if (tmIsRunning) {
+                // Pause
+                tmIsRunning = false;
+                cancelAnimationFrame(animationFrameId);
+                btnStart.textContent = '계속';
+                btnStart.classList.replace('bg-red-500', 'bg-accent');
+                btnStart.classList.replace('shadow-red-500/20', 'shadow-accent/20');
+            } else {
+                // Start
+                tmIsRunning = true;
+                tmEndTime = Date.now() + tmRemaining;
+                btnStart.textContent = '일시정지';
+                btnStart.classList.replace('bg-accent', 'bg-red-500');
+                btnStart.classList.replace('shadow-accent/20', 'shadow-red-500/20');
+                update();
+            }
+        }
+
+        function resetTimer() {
+            tmIsRunning = false;
+            cancelAnimationFrame(animationFrameId);
+            tmRemaining = tmDuration;
+            
+            const btnStart = document.getElementById('tm-btn-start');
+            btnStart.textContent = '시작';
+            btnStart.classList.replace('bg-red-500', 'bg-accent');
+            btnStart.classList.replace('shadow-red-500/20', 'shadow-accent/20');
+            
+            updateDisplay();
+        }
+
+        function setTimerPreset(minutes) {
+            tmDuration = minutes * 60 * 1000;
+            tmRemaining = tmDuration;
+            resetTimer(); // Apply and reset UI state
+        }
+
+        function setCustomTimer() {
+            const minInput = document.getElementById('custom-min').value;
+            const secInput = document.getElementById('custom-sec').value;
+            
+            const mins = parseInt(minInput) || 0;
+            const secs = parseInt(secInput) || 0;
+            
+            if (mins === 0 && secs === 0) return;
+            
+            tmDuration = (mins * 60 * 1000) + (secs * 1000);
+            tmRemaining = tmDuration;
+            resetTimer();
+
+            // Clear inputs
+            document.getElementById('custom-min').value = '';
+            document.getElementById('custom-sec').value = '';
+        }
+
+        function timerComplete() {
+            tmIsRunning = false;
+            updateDisplay();
+            
+            const btnStart = document.getElementById('tm-btn-start');
+            btnStart.textContent = '시작';
+            btnStart.classList.replace('bg-red-500', 'bg-accent');
+            btnStart.classList.replace('shadow-red-500/20', 'shadow-accent/20');
+            
+            playAlarmSound();
+            
+            // Visual feedback
+            const display = document.getElementById('time-display');
+            display.classList.add('text-red-500', 'animate-pulse');
+            setTimeout(() => {
+                display.classList.remove('text-red-500', 'animate-pulse');
+                tmRemaining = tmDuration; // Reset to original duration ready for next start
+                updateDisplay();
+            }, 3000);
+        }
+
+        // --- Audio System (Web Audio API) ---
+        function playAlarmSound() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                
+                // Play 3 beeps
+                for (let i = 0; i < 3; i++) {
+                    const osc = ctx.createOscillator();
+                    const gainNode = ctx.createGain();
+                    
+                    osc.connect(gainNode);
+                    gainNode.connect(ctx.destination);
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, ctx.currentTime + (i * 0.5)); // A5 note
+                    
+                    // Fade in/out to avoid clicking sounds
+                    gainNode.gain.setValueAtTime(0, ctx.currentTime + (i * 0.5));
+                    gainNode.gain.linearRampToValueAtTime(1, ctx.currentTime + (i * 0.5) + 0.05);
+                    gainNode.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (i * 0.5) + 0.4);
+                    
+                    osc.start(ctx.currentTime + (i * 0.5));
+                    osc.stop(ctx.currentTime + (i * 0.5) + 0.5);
+                }
+            } catch (e) {
+                console.error("Audio API not supported", e);
+            }
+        }
+
+        // --- Run Init ---
+        init();
+
+    </script>
+</body>
+</html>
